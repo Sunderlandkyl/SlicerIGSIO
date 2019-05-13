@@ -34,6 +34,9 @@ Care Ontario.
 // Sequences MRML includes
 #include <vtkMRMLSequenceBrowserNode.h>
 
+//
+#include <vtkMRMLScalarVolumeNode.h>
+
 class vtkMRMLIGTLConnectorNode;
 class vtkMRMLScalarVolumeNode;
 class vtkMRMLAnnotationROINode;
@@ -47,6 +50,9 @@ public:
   void PrintSelf(ostream&, vtkIndent) override;
 
   void RegisterNodes() override;
+
+  bool AddVolumeNodeToReconstructedVolume(vtkMRMLScalarVolumeNode* volumeNode);
+  void StartReconstruction(vtkMRMLAnnotationROINode* roiNode);
 
   void ReconstructVolume(
     vtkMRMLSequenceBrowserNode* inputSequenceBrowser,

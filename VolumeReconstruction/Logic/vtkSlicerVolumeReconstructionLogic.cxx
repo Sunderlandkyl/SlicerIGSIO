@@ -54,6 +54,7 @@ Care Ontario.
 
 // VTK includes
 #include <vtkMatrix4x4.h>
+#include <vtkTransform.h>
 
 //---------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerVolumeReconstructionLogic);
@@ -66,6 +67,8 @@ public:
   vtkInternal(vtkSlicerVolumeReconstructionLogic* external);
   ~vtkInternal();
 
+  vtkSmartPointer<vtkIGSIOVolumeReconstructor> Reconstructor;
+
   vtkSlicerVolumeReconstructionLogic* External;
 };
 
@@ -75,6 +78,7 @@ public:
 //---------------------------------------------------------------------------
 vtkSlicerVolumeReconstructionLogic::vtkInternal::vtkInternal(vtkSlicerVolumeReconstructionLogic* external)
   : External(external)
+  , Reconstructor(vtkSmartPointer<vtkIGSIOVolumeReconstructor>::New())
 {
 }
 
@@ -108,6 +112,62 @@ void vtkSlicerVolumeReconstructionLogic::RegisterNodes()
 }
 
 //---------------------------------------------------------------------------
+void vtkSlicerVolumeReconstructionLogic::StartReconstruction(vtkMRMLAnnotationROINode* roiNode)
+{
+  //this->Internal->Reconstructor
+}
+
+//---------------------------------------------------------------------------
+bool vtkSlicerVolumeReconstructionLogic::AddVolumeNodeToReconstructedVolume(vtkMRMLScalarVolumeNode* volumeNode)
+{
+  if (!volumeNode->GetImageData())
+  {
+    vtkErrorMacro("Input volume node has no image data!");
+    return false;
+  }
+
+  vtkNew<vtkTransform> imageToWorldTransform;
+  imageToWorldTransform->Identity();
+  imageToWorldTransform->PreMultiply();
+  vtkNew<vtkMatrix4x4> ijkToRASMatrix;
+  volumeNode->GetIJKToRASMatrix(ijkToRASMatrix);
+  imageToWorldTransform->Concatenate(ijkToRASMatrix);
+
+  vtkNew<vtkMatrix4x4> parentToWorldMatrix;
+  vtkMRMLTransformNode* transformNode = volumeNode->GetParentTransformNode();
+  if (transformNode)
+  {
+    transformNode->GetMatrixTransformToWorld(parentToWorldMatrix);
+    imageToWorldTransform->Concatenate(parentToWorldMatrix);
+  }
+
+  vtkNew<vtkIGSIOTransformRepository> transformRepository;
+  transformRepository->SetTransform(igsioTransformName("ImageToWorld"), imageToWorldTransform->GetMatrix());
+
+  std::string errorDetail;
+  igsioTrackedFrame trackedFrame;
+  trackedFrame.GetImageData()->DeepCopyFrom(volumeNode->GetImageData());
+
+  //vtkNew<vtkIGSIOTrackedFrameList> trackedFrameList;
+  //trackedFrameList->AddTrackedFrame(&trackedFrame, vtkIGSIOTrackedFrameList::ADD_INVALID_FRAME);
+  //if (this->Internal->Reconstructor->SetOutputExtentFromFrameList(trackedFrameList, transformRepository, errorDetail) != IGSIO_SUCCESS)
+  //{
+  //  LOG_ERROR("Failed to set output extent of volume!");
+  //  return EXIT_FAILURE;
+  //}
+
+  bool insertedIntoVolume = false;
+  if (this->Internal->Reconstructor->AddTrackedFrame(&trackedFrame, transformRepository, &insertedIntoVolume) != IGSIO_SUCCESS)
+  {
+    return false;
+  }
+
+  //trackedFrameList->Clear();
+
+  return  true;
+}
+
+//---------------------------------------------------------------------------
 void vtkSlicerVolumeReconstructionLogic::ReconstructVolume(
   vtkMRMLSequenceBrowserNode* inputSequenceBrowser,
   vtkMRMLScalarVolumeNode* outputVolumeNode,
@@ -131,90 +191,55 @@ void vtkSlicerVolumeReconstructionLogic::ReconstructVolume(
     return;
   }
 
-  vtkSmartPointer<vtkIGSIOVolumeReconstructor> reconstructor = vtkSmartPointer<vtkIGSIOVolumeReconstructor>::New();
-  reconstructor->SetOutputSpacing(outputSpacing);
-  reconstructor->SetCompoundingMode(vtkIGSIOPasteSliceIntoVolume::CompoundingType(compoundingMode));
-  reconstructor->SetOptimization(vtkIGSIOPasteSliceIntoVolume::OptimizationType(optimizationMode));
-  reconstructor->SetInterpolation(vtkIGSIOPasteSliceIntoVolume::InterpolationType(interpolationMode));
-  reconstructor->SetNumberOfThreads(numberOfThreads);
-  reconstructor->SetFillHoles(fillHoles);
-  reconstructor->SetImageCoordinateFrame("IJK"); // TODO
-  reconstructor->SetReferenceCoordinateFrame("RAS"); // TODO
+  if (!roiNode)
+  {
+    return;
+  }
 
-  int clipOrigin[2] = { 0,0 };
-  reconstructor->SetClipRectangleOrigin(clipOrigin);
-  int clipRectangleSize[2] = { 820, 616 };
-  reconstructor->SetClipRectangleSize(clipRectangleSize);
-  double origin[3] = { -15,-15,30 };
-  reconstructor->SetOutputOrigin(origin);
-  int extent[6] = { 0, 300, 0, 300, 0, 300 };
-  reconstructor->SetOutputExtent(extent);
+  this->Internal->Reconstructor->SetOutputSpacing(outputSpacing);
+  this->Internal->Reconstructor->SetCompoundingMode(vtkIGSIOPasteSliceIntoVolume::CompoundingType(compoundingMode));
+  this->Internal->Reconstructor->SetOptimization(vtkIGSIOPasteSliceIntoVolume::OptimizationType(optimizationMode));
+  this->Internal->Reconstructor->SetInterpolation(vtkIGSIOPasteSliceIntoVolume::InterpolationType(interpolationMode));
+  this->Internal->Reconstructor->SetNumberOfThreads(numberOfThreads);
+  this->Internal->Reconstructor->SetFillHoles(fillHoles);
+  this->Internal->Reconstructor->SetImageCoordinateFrame("Image"); // TODO
+  this->Internal->Reconstructor->SetReferenceCoordinateFrame("World"); // TODO
 
-  LOG_INFO("Reconstruct volume...");
-  //const int numberOfFrames = trackedFrameList->GetNumberOfTrackedFrames();
-  int numberOfFrames = inputSequenceBrowser->GetNumberOfItems();
-  int numberOfFramesAddedToVolume = 0;
+  double bounds[6];
+  roiNode->GetBounds(bounds);
+
+  //int clipOrigin[2] = { 0,0 };
+  //this->Internal->Reconstructor->SetClipRectangleOrigin(clipOrigin);
+  //int clipRectangleSize[2] = { 820, 616 };
+  //this->Internal->Reconstructor->SetClipRectangleSize(clipRectangleSize);
+
+  int extent[6] = {
+  0, std::ceil((bounds[1] - bounds[0]) / outputSpacing[0]),
+  0, std::ceil((bounds[3] - bounds[2]) / outputSpacing[1]),
+  0, std::ceil((bounds[5] - bounds[4]) / outputSpacing[2])
+  };
+  this->Internal->Reconstructor->SetOutputExtent(extent);
+  double origin[3] = { bounds[0], bounds[2], bounds[4] };
+  this->Internal->Reconstructor->SetOutputOrigin(origin);
+
+  this->Internal->Reconstructor->Reset();
+  vtkMRMLSequenceNode* masterSequence = inputSequenceBrowser->GetMasterSequenceNode(); // TODO: for now assume image is master
+  const int numberOfFrames = masterSequence->GetNumberOfDataNodes();
+  for (int i = 0; i < numberOfFrames; ++i)
+  {
+    vtkMRMLSequenceNode* imageSequence = masterSequence;
+    inputSequenceBrowser->SetSelectedItemNumber(i);
+    vtkMRMLScalarVolumeNode* volumeNode = vtkMRMLScalarVolumeNode::SafeDownCast(
+      inputSequenceBrowser->GetProxyNode(imageSequence));
+    this->AddVolumeNodeToReconstructedVolume(volumeNode);
+  }
 
   //std::string errorDetail;
-  //if (reconstructor->SetOutputExtentFromFrameList(trackedFrameList, transformRepository, errorDetail) != IGSIO_SUCCESS)
+  //if (this->Internal->Reconstructor->SetOutputExtentFromFrameList(trackedFrameList, vtkNew<vtkIGSIOTransformRepository>(), errorDetail) != IGSIO_SUCCESS)
   //{
   //  vtkErrorMacro("Failed to set output extent of volume! " << errorDetail);
   //  return;
   //}
-
-  std::vector<vtkMRMLSequenceNode*> sequenceNodes;
-  inputSequenceBrowser->GetSynchronizedSequenceNodes(sequenceNodes, true);
-
-  vtkMRMLSequenceNode* masterSequenceNode = inputSequenceBrowser->GetMasterSequenceNode();
-
-  for (int i = 0; i < numberOfFrames; ++i)
-  {
-    inputSequenceBrowser->SetSelectedItemNumber(i);
-
-    // TODO: get sequence node
-    vtkNew<vtkIGSIOTransformRepository> transformRepository;
-    vtkNew<vtkMatrix4x4> matrixIJKToRAS;
-
-    igsioTrackedFrame trackedFrame;
-
-    for (vtkMRMLSequenceNode* sequenceNode : sequenceNodes)
-    {
-      if (sequenceNode != masterSequenceNode)
-      {
-        //vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(sequenceNode->GetNthDataNode(i));
-        //vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
-        //transformNode->GetMatrixTransformToParent(matrix);
-
-        //igsioTransformName transformName(transformNode->GetName());
-        //trackedFrame.SetFrameTransform(transformName, matrix);
-        //trackedFrame.SetFrameTransformStatus(transformName, ToolStatus::TOOL_OK); //TODO: Attribute to status
-      }
-      else
-      {
-        vtkMRMLVolumeNode* volumeNode = vtkMRMLVolumeNode::SafeDownCast(sequenceNode->GetNthDataNode(i));
-        trackedFrame.GetImageData()->SetImageOrientation(US_IMG_ORIENT_MF); // TODO: save orientation and type
-                                                                            //trackedFrame->GetImageData()->SetImageType(US_IMG_RGB_COLOR);
-        trackedFrame.SetTimestamp(i);
-        trackedFrame.GetImageData()->DeepCopyFrom(volumeNode->GetImageData());
-        transformRepository->SetTransform(igsioTransformName("IJKToRAS"), matrixIJKToRAS, ToolStatus::TOOL_OK);
-      }
-    }
-
-    // Insert slice for reconstruction
-    bool insertedIntoVolume = false;
-    if (reconstructor->AddTrackedFrame(&trackedFrame, transformRepository, &insertedIntoVolume) != IGSIO_SUCCESS)
-    {
-      vtkErrorMacro("Failed to add sequence to volume with frame #" << i);
-      continue;
-    }
-
-    if (insertedIntoVolume)
-    {
-      numberOfFramesAddedToVolume++;
-    }
-  }
-
-  vtkDebugMacro("Number of frames added to the volume: " << numberOfFramesAddedToVolume << " out of " << numberOfFrames);
 
   if (!outputVolumeNode->GetImageData())
   {
@@ -222,15 +247,16 @@ void vtkSlicerVolumeReconstructionLogic::ReconstructVolume(
     outputVolumeNode->SetAndObserveImageData(imageData);
   }
 
-  if (reconstructor->GetReconstructedVolume(outputVolumeNode->GetImageData()) != IGSIO_SUCCESS)
+  if (this->Internal->Reconstructor->GetReconstructedVolume(outputVolumeNode->GetImageData()) != IGSIO_SUCCESS)
   {
     vtkErrorMacro("Could not retreive reconstructed image");
   }
 
   outputVolumeNode->GetImageData()->SetSpacing(1, 1, 1);
   outputVolumeNode->SetSpacing(outputSpacing);
-  //outputVolumeNode->GetImageData()->SetOrigin(0, 0, 0);
-  //outputVolumeNode->SetOrigin(outputOrigin);
+
+  outputVolumeNode->GetImageData()->SetOrigin(0, 0, 0);
+  outputVolumeNode->SetOrigin(origin);
 }
 
 //---------------------------------------------------------------------------
