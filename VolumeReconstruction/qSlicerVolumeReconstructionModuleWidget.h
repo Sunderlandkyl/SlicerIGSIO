@@ -45,6 +45,7 @@ public:
   virtual ~qSlicerVolumeReconstructionModuleWidget();
 
 public slots:
+  void onToggleROIVisible();
   void onApply();
 
 protected:

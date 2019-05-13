@@ -36,6 +36,7 @@ Care Ontario.
 
 class vtkMRMLIGTLConnectorNode;
 class vtkMRMLScalarVolumeNode;
+class vtkMRMLAnnotationROINode;
 
 /// \ingroup Slicer_QtModules_VolumeReconstruction
 class VTK_SLICER_VOLUMERECONSTRUCTION_MODULE_LOGIC_EXPORT vtkSlicerVolumeReconstructionLogic : public vtkSlicerModuleLogic
@@ -50,6 +51,7 @@ public:
   void ReconstructVolume(
     vtkMRMLSequenceBrowserNode* inputSequenceBrowser,
     vtkMRMLScalarVolumeNode* outputVolumeNode,
+    vtkMRMLAnnotationROINode* roiNode,
     double outputSpacing[3],
     int interpolationMode,
     int optimizationMode,

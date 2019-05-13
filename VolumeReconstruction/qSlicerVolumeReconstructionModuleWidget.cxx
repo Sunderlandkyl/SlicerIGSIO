@@ -34,11 +34,18 @@ Care Ontario.
 // Sequence includes
 #include <vtkMRMLSequenceBrowserNode.h>
 
+// Slicer MRML includes
 #include <vtkMRMLScalarVolumeNode.h>
+#include <vtkMRMLAnnotationROINode.h>
+#include <vtkMRMLAnnotationDisplayNode.h>
 
+// Volume reconstruction logic includes
 #include "vtkSlicerVolumeReconstructionLogic.h"
 
+// IGSIO volume reconstruction includes
 #include "vtkIGSIOVolumeReconstructor.h"
+
+// IGSIO common includes
 #include "vtkIGSIOTrackedFrameList.h"
 
 // qMRMLWidgets includes
@@ -47,7 +54,7 @@ Care Ontario.
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_VolumeReconstruction
-class qSlicerVolumeReconstructionModuleWidgetPrivate: public Ui_qSlicerVolumeReconstructionModule
+class qSlicerVolumeReconstructionModuleWidgetPrivate : public Ui_qSlicerVolumeReconstructionModule
 {
   Q_DECLARE_PUBLIC(qSlicerVolumeReconstructionModuleWidget);
 protected:
@@ -116,20 +123,46 @@ void qSlicerVolumeReconstructionModuleWidget::setup()
   d->CompoundingModeComboBox->addItem("Mean", vtkIGSIOPasteSliceIntoVolume::CompoundingType::MEAN_COMPOUNDING_MODE);
   d->CompoundingModeComboBox->addItem("Importance mask", vtkIGSIOPasteSliceIntoVolume::CompoundingType::IMPORTANCE_MASK_COMPOUNDING_MODE);
 
-  connect(d->ApplyButton, SIGNAL(clicked()), this, SLOT(onApply()));
   connect(d->InputSequenceBrowserSelector, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(updateWidgetFromMRML()));
   connect(d->OutputVolumeSelector, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(updateWidgetFromMRML()));
+  connect(d->ReconstructionROISelector, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(updateWidgetFromMRML()));
+  connect(d->ROIVisibilityButton, SIGNAL(clicked()), this, SLOT(onToggleROIVisible()));
+  connect(d->ApplyButton, SIGNAL(clicked()), this, SLOT(onApply()));
 }
 
 //-----------------------------------------------------------------------------
 void qSlicerVolumeReconstructionModuleWidget::updateWidgetFromMRML()
 {
   Q_D(qSlicerVolumeReconstructionModuleWidget);
-  
-  vtkMRMLSequenceBrowserNode* inputSequenceBrowser = vtkMRMLSequenceBrowserNode::SafeDownCast(d->InputSequenceBrowserSelector->currentNode());
-  vtkMRMLScalarVolumeNode* outputVolunmeNode = vtkMRMLScalarVolumeNode::SafeDownCast(d->OutputVolumeSelector->currentNode());
 
-  //d->ApplyButton->setEnabled(inputSequenceBrowser && outputVolunmeNode);
+  vtkMRMLSequenceBrowserNode* inputSequenceBrowser = vtkMRMLSequenceBrowserNode::SafeDownCast(d->InputSequenceBrowserSelector->currentNode());
+  vtkMRMLScalarVolumeNode* outputVolumeNode = vtkMRMLScalarVolumeNode::SafeDownCast(d->OutputVolumeSelector->currentNode());
+  vtkMRMLAnnotationROINode* reconstructionROINode = vtkMRMLAnnotationROINode::SafeDownCast(d->ReconstructionROISelector->currentNode());
+
+  d->ROIVisibilityButton->setEnabled(reconstructionROINode);
+  if (reconstructionROINode)
+  {
+    d->ROIVisibilityButton->setChecked(reconstructionROINode->GetDisplayVisibility());
+  }
+  else
+  {
+    d->ROIVisibilityButton->setChecked(false);
+  }
+
+  d->ApplyButton->setEnabled(inputSequenceBrowser && outputVolumeNode);
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerVolumeReconstructionModuleWidget::onToggleROIVisible()
+{
+  Q_D(qSlicerVolumeReconstructionModuleWidget);
+  vtkMRMLAnnotationROINode* reconstructionROINode = vtkMRMLAnnotationROINode::SafeDownCast(d->ReconstructionROISelector->currentNode());
+  if (!reconstructionROINode)
+  {
+    return;
+  }
+
+  reconstructionROINode->SetDisplayVisibility(d->ROIVisibilityButton->isChecked());
 }
 
 //-----------------------------------------------------------------------------
@@ -138,12 +171,8 @@ void qSlicerVolumeReconstructionModuleWidget::onApply()
   Q_D(qSlicerVolumeReconstructionModuleWidget);
 
   vtkMRMLSequenceBrowserNode* inputSequenceBrowser = vtkMRMLSequenceBrowserNode::SafeDownCast(d->InputSequenceBrowserSelector->currentNode());
-  vtkMRMLScalarVolumeNode* outputVolunmeNode = vtkMRMLScalarVolumeNode::SafeDownCast(d->OutputVolumeSelector->currentNode());
-
-  //vtkMRMLSequenceBrowserNode* outputSequenceBrowser = vtkMRMLSequenceBrowserNode::SafeDownCast(d->OutputVolumeSelector->currentNode());
-  //vtkNew<vtkIGSIOTrackedFrameList> trackedFrameList;
-  //vtkSlicerIGSIOCommon::SequenceBrowserToTrackedFrameList(inputSequenceBrowser, trackedFrameList);
-  //vtkSlicerIGSIOCommon::TrackedFrameListToSequenceBrowser(trackedFrameList, outputSequenceBrowser); 
+  vtkMRMLScalarVolumeNode* outputVolumeNode = vtkMRMLScalarVolumeNode::SafeDownCast(d->OutputVolumeSelector->currentNode());
+  vtkMRMLAnnotationROINode* reconstructionROINode = vtkMRMLAnnotationROINode::SafeDownCast(d->ReconstructionROISelector->currentNode());
 
   double outputSpacing[3] = { 0,0,0 };
   outputSpacing[0] = d->XSpacingSpinbox->value();
@@ -156,11 +185,7 @@ void qSlicerVolumeReconstructionModuleWidget::onApply()
   bool fillHoles = d->FillHolesCheckBox->isChecked();
   int numberOfThreads = d->NumberOfThreadsSpinBox->value();
 
-  d->logic()->ReconstructVolume(inputSequenceBrowser, outputVolunmeNode, outputSpacing, interpolationMode, optimizationMode, compoundingMode, fillHoles, numberOfThreads);
-  vtkNew<vtkMetaImageWriter> writer;
-  writer->SetFileName("E:\d\p\PD15\PlusLibData\TestImages\fCal_Test_Calibration_3NWires.mha");
-  writer->SetInputData(outputVolunmeNode->GetImageData());
-  writer->Write();
+  d->logic()->ReconstructVolume(inputSequenceBrowser, outputVolumeNode, reconstructionROINode, outputSpacing, interpolationMode, optimizationMode, compoundingMode, fillHoles, numberOfThreads);
 }
 
 //-----------------------------------------------------------------------------

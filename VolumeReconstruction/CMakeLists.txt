@@ -42,6 +42,7 @@ set(MODULE_UI_SRCS
 set(MODULE_TARGET_LIBRARIES
   vtkSlicer${MODULE_NAME}ModuleLogic
   ${MRML_LIBRARIES}
+  vtkSlicerAnnotationsModuleMRML
   vtkIGSIOCommon
   vtkSequenceIO
   vtkVolumeReconstruction
