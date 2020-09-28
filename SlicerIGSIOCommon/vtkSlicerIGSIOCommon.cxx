@@ -173,7 +173,10 @@ bool vtkSlicerIGSIOCommon::TrackedFrameListToVolumeSequence(vtkIGSIOTrackedFrame
     std::string frameStatus = trackedFrame->GetFrameField(FRAME_STATUS_TRACKNAME);
     if (!frameStatus.empty() || vtkVariant(frameStatus).ToInt() != Frame_Skip)
     {
-      sequenceNode->SetDataNodeAtValue(volumeNode, timestampSS.str());
+      vtkSmartPointer<vtkMRMLVolumeNode> tempVolumeNode = vtkSmartPointer <vtkMRMLVolumeNode>::Take(
+        vtkMRMLVolumeNode::SafeDownCast(volumeNode->CreateNodeInstance()));
+      sequenceNode->SetDataNodeAtValue(tempVolumeNode, timestampSS.str(), false); // shallow-copy
+      sequenceNode->UpdateDataNodeAtValue(volumeNode, timestampSS.str(), true);
     }
   }
 
