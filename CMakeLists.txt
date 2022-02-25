@@ -61,6 +61,7 @@ add_subdirectory(SequenceIO)
 add_subdirectory(VideoUtil)
 add_subdirectory(VolumeReconstruction)
 add_subdirectory(MetafileImporter)
+add_subdirectory(LandmarkDetection)
 
 #-----------------------------------------------------------------------------
 # Add IGSIO to SlicerIGSIOConfig
