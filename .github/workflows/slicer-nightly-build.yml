@@ -1,0 +1,99 @@
+name: Build against the Slicer nightly
+
+# Builds this extension against the Slicer build published by the Slicer
+# repository's "Build" workflow, using the action it provides.
+#
+# This is the reference shape for an extension repository: no checkout of
+# Slicer, no local Slicer build, one action that restores everything and hands
+# back the value to pass as Slicer_DIR.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # After the Slicer nightly.
+    - cron: "0 12 * * *"
+
+permissions:
+  contents: read
+
+env:
+  # The Slicer repository publishing the nightly, and the branch providing the
+  # action. Both are the defaults on Slicer/Slicer once this has been merged.
+  SLICER_REPOSITORY: Sunderlandkyl/Slicer
+  SLICER_REF: ci/github-actions-build
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux, runner: ubuntu-22.04 }
+    steps:
+      - uses: actions/checkout@v5
+
+      # Nothing to build against until a nightly has been published.
+      - name: Check for a published Slicer build
+        id: nightly
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view nightly -R "$SLICER_REPOSITORY" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No 'nightly' release in $SLICER_REPOSITORY yet."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up the Slicer build
+        id: slicer
+        if: steps.nightly.outputs.found == 'true'
+        uses: Sunderlandkyl/Slicer/.github/actions/setup-slicer-build@ci/github-actions-build
+        with:
+          repository: ${{ env.SLICER_REPOSITORY }}
+          ref: ${{ env.SLICER_REF }}
+          release-tag: nightly
+
+      - name: Configure
+        if: steps.nightly.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$GITHUB_WORKSPACE" -B "$SLICER_ROOT/igsio-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DSlicer_DIR:PATH=${{ steps.slicer.outputs.slicer-dir }}
+
+      - name: Build
+        if: steps.nightly.outputs.found == 'true'
+        shell: bash
+        run: cmake --build "$SLICER_ROOT/igsio-build" --parallel
+
+      - name: Package
+        if: steps.nightly.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          inner="$SLICER_ROOT/igsio-build/inner-build"
+          cmake --build "$inner" --target package
+          find "$SLICER_ROOT/igsio-build" -maxdepth 3 \
+            \( -name '*.tar.gz' -o -name '*.zip' \) -print
+
+      - name: Load the extension in Slicer
+        if: steps.nightly.outputs.found == 'true'
+        shell: bash
+        env:
+          LAUNCHER: ${{ steps.slicer.outputs.launcher }}
+        run: |
+          set -euo pipefail
+          export QTWEBENGINE_DISABLE_SANDBOX=1 LIBGL_ALWAYS_SOFTWARE=1
+          xvfb-run -a "$LAUNCHER" \
+            --no-splash --no-main-window --ignore-slicerrc \
+            --additional-module-paths "$SLICER_ROOT/igsio-build/inner-build" \
+            --python-code "import slicer; print('modules:', len(slicer.app.moduleManager().modulesNames())); exit(slicer.util.EXIT_SUCCESS)"
