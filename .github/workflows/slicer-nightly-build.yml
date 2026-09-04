@@ -85,6 +85,16 @@ jobs:
           find "$SLICER_ROOT/igsio-build" -maxdepth 3 \
             \( -name '*.tar.gz' -o -name '*.zip' \) -print
 
+      - name: Upload the extension package
+        if: steps.nightly.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlicerIGSIO-${{ matrix.platform }}
+          path: ${{ env.SLICER_ROOT }}/igsio-build/inner-build/*.tar.gz
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+
       - name: Load the extension in Slicer
         if: steps.nightly.outputs.found == 'true'
         shell: bash
