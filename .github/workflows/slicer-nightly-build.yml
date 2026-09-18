@@ -24,3 +24,4 @@ jobs:
     with:
       platforms: linux,macos,windows
       slicer-repository: Sunderlandkyl/Slicer
+      slicer-ref: exp/extension-workflow
