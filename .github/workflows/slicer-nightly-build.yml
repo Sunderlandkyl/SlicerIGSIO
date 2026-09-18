@@ -19,9 +19,12 @@ permissions:
 
 jobs:
   build:
+    permissions:
+      contents: write
     # On Slicer/Slicer this is Slicer/Slicer/.github/workflows/extension-build.yml@main
     uses: Sunderlandkyl/Slicer/.github/workflows/extension-build.yml@exp/extension-workflow
     with:
       platforms: linux,macos,windows
       slicer-repository: Sunderlandkyl/Slicer
       slicer-ref: exp/extension-workflow
+      publish: true
