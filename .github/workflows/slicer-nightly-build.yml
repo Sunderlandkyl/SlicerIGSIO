@@ -22,5 +22,5 @@ jobs:
     # On Slicer/Slicer this is Slicer/Slicer/.github/workflows/extension-build.yml@main
     uses: Sunderlandkyl/Slicer/.github/workflows/extension-build.yml@exp/extension-workflow
     with:
-      platforms: linux
+      platforms: linux,macos,windows
       slicer-repository: Sunderlandkyl/Slicer
