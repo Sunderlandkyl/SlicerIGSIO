@@ -22,9 +22,12 @@ jobs:
     permissions:
       contents: write
     # On Slicer/Slicer this is Slicer/Slicer/.github/workflows/extension-build.yml@main
-    uses: Sunderlandkyl/Slicer/.github/workflows/extension-build.yml@exp/extension-workflow
+    uses: Sunderlandkyl/Slicer/.github/workflows/extension-build.yml@ci/github-actions-build
     with:
-      platforms: linux,macos,windows
+      # web: for SlicerWeb, against the web build tree of the nightly.
+      platforms: linux,macos,windows,web
       slicer-repository: Sunderlandkyl/Slicer
-      slicer-ref: exp/extension-workflow
-      publish: true
+      slicer-ref: ci/github-actions-build
+      # To the release slicer-<commit of Slicer>; a pull request's token cannot
+      # write to the releases.
+      publish: ${{ github.event_name != 'pull_request' }}
