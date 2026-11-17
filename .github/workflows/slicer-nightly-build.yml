@@ -28,6 +28,6 @@ jobs:
       platforms: linux,macos,windows,web
       slicer-repository: Sunderlandkyl/Slicer
       slicer-ref: ci/github-actions-build
-      # To the release slicer-<commit of Slicer>; a pull request's token cannot
-      # write to the releases.
+      # To the nightly release, which says what Slicer each package was built
+      # against; a pull request's token cannot write to the releases.
       publish: ${{ github.event_name != 'pull_request' }}
