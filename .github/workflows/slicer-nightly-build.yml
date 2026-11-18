@@ -35,9 +35,12 @@ jobs:
       slicer-repository: Sunderlandkyl/Slicer
       slicer-ref: ci/github-actions-build
       # To the nightly release, which says what each package was built
-      # against. Only the builds Slicer's Reconcile extensions workflow starts
-      # publish, in the order of the dependencies: a push or a pull request
-      # builds and tests.
-      publish: ${{ github.event_name == 'workflow_dispatch' }}
+      # against, each platform as soon as it is built. A commit to this branch
+      # publishes, and so do the builds Slicer's Reconcile extensions workflow
+      # starts, for a new Slicer or a new package of an extension this one
+      # depends on; a pull request or another branch builds and tests.
+      publish: >-
+        ${{ github.event_name == 'workflow_dispatch'
+            || (github.event_name == 'push' && github.ref_name == 'ci/slicer-actions-test') }}
       # For the extensions that depend on this one, which build against it.
       publish-build-tree: true
