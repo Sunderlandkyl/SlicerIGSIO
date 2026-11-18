@@ -10,6 +10,12 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      # Slicer's Reconcile extensions workflow starts one run per platform, so
+      # that no platform waits for another.
+      platforms:
+        description: "Platforms to build (comma separated; default: all)"
+        default: ""
   schedule:
     # After the Slicer nightly.
     - cron: "0 12 * * *"
@@ -25,7 +31,7 @@ jobs:
     uses: Sunderlandkyl/Slicer/.github/workflows/extension-build.yml@ci/github-actions-build
     with:
       # web: for SlicerWeb, against the web build tree of the nightly.
-      platforms: linux,macos,windows,web
+      platforms: ${{ inputs.platforms || 'linux,macos,windows,web' }}
       slicer-repository: Sunderlandkyl/Slicer
       slicer-ref: ci/github-actions-build
       # To the nightly release, which says what each package was built
