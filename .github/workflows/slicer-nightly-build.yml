@@ -28,6 +28,10 @@ jobs:
       platforms: linux,macos,windows,web
       slicer-repository: Sunderlandkyl/Slicer
       slicer-ref: ci/github-actions-build
-      # To the nightly release, which says what Slicer each package was built
-      # against; a pull request's token cannot write to the releases.
-      publish: ${{ github.event_name != 'pull_request' }}
+      # To the nightly release, which says what each package was built
+      # against. Only the builds Slicer's Reconcile extensions workflow starts
+      # publish, in the order of the dependencies: a push or a pull request
+      # builds and tests.
+      publish: ${{ github.event_name == 'workflow_dispatch' }}
+      # For the extensions that depend on this one, which build against it.
+      publish-build-tree: true
