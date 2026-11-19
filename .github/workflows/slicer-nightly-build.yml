@@ -18,9 +18,6 @@ on:
       platforms:
         description: "Platforms to build (comma separated; default: all)"
         default: ""
-  schedule:
-    # After the Slicer nightly.
-    - cron: "0 12 * * *"
 
 permissions:
   contents: read
